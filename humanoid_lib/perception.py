@@ -121,16 +121,12 @@ def convert_to_joint_angles(skeleton_landmarks: landmark_pb2.NormalizedLandmarkL
         lm = skeleton_landmarks[lm_index]
         return np.array([lm.x, lm.y])
 
-    def calc_angle_2d(p1_idx, p2_idx, p3_idx):
+    def _calc_angle_2d_from_points(p1, p2, p3):
         """
         Calculates the 2D angle at p2 formed by p1-p2-p3.
         This implements the "vectors between adjacent joints"
         and "atan2" logic.
         """
-        p1 = get_coords(p1_idx)
-        p2 = get_coords(p2_idx)
-        p3 = get_coords(p3_idx)
-
         v1 = p1 - p2
         v2 = p3 - p2
 
@@ -143,7 +139,16 @@ def convert_to_joint_angles(skeleton_landmarks: landmark_pb2.NormalizedLandmarkL
 
         return angle
 
+    def calc_angle_2d(p1_idx, p2_idx, p3_idx):
+        """Wrapper to calculate angle from landmark indices."""
+        return _calc_angle_2d_from_points(
+            get_coords(p1_idx),
+            get_coords(p2_idx),
+            get_coords(p3_idx)
+        )
+
     # --- MediaPipe Pose Landmark Indices ---
+    NOSE = 0
     L_SHOULDER, R_SHOULDER = 11, 12
     L_HIP, R_HIP = 23, 24
     L_KNEE, R_KNEE = 25, 26
@@ -155,35 +160,48 @@ def convert_to_joint_angles(skeleton_landmarks: landmark_pb2.NormalizedLandmarkL
     # We calculate all possible angles and store them in a dictionary
     theta_init_dict = {}
 
-    # **todo**: You MUST update the keys (e.g., 'left_knee_joint') to
-    # match the joint names from your URDF file.
-
     try:
-        # --- Leg Joints ---
-        theta_init_dict['left_knee_joint'] = calc_angle_2d(
+        # --- NEW: Calculate midpoints for torso and neck ---
+        p_mid_hip = (get_coords(L_HIP) + get_coords(R_HIP)) / 2
+        p_mid_shoulder = (get_coords(L_SHOULDER) + get_coords(R_SHOULDER)) / 2
+        p_nose = get_coords(NOSE)
+
+        # --- NEW: Calculate 'chest' and 'neck' angles ---
+        # 'chest': Angle of the torso (mid_hip -> mid_shoulder) relative to vertical
+        # This approximates the torso's "lean"
+        v_torso = p_mid_shoulder - p_mid_hip
+        theta_init_dict['chest'] = np.arctan2(v_torso[0], v_torso[1])
+
+        # 'neck': Angle at the shoulder line, formed by the hips and nose
+        # This approximates the neck's "bend" relative to the torso
+        theta_init_dict['neck'] = _calc_angle_2d_from_points(
+            p_mid_hip, p_mid_shoulder, p_nose)
+
+        # --- Leg Joints (FIXED: removed '_joint' from names) ---
+        theta_init_dict['left_knee'] = calc_angle_2d(
             L_HIP, L_KNEE, L_ANKLE)
-        theta_init_dict['right_knee_joint'] = calc_angle_2d(
+        theta_init_dict['right_knee'] = calc_angle_2d(
             R_HIP, R_KNEE, R_ANKLE)
 
-        theta_init_dict['left_hip_joint'] = calc_angle_2d(
+        theta_init_dict['left_hip'] = calc_angle_2d(
             L_SHOULDER, L_HIP, L_KNEE)
-        theta_init_dict['right_hip_joint'] = calc_angle_2d(
+        theta_init_dict['right_hip'] = calc_angle_2d(
             R_SHOULDER, R_HIP, R_KNEE)
 
-        theta_init_dict['left_ankle_joint'] = calc_angle_2d(
+        theta_init_dict['left_ankle'] = calc_angle_2d(
             L_KNEE, L_ANKLE, 29)  # 29 is L_HEEL
-        theta_init_dict['right_ankle_joint'] = calc_angle_2d(
+        theta_init_dict['right_ankle'] = calc_angle_2d(
             R_KNEE, R_ANKLE, 30)  # 30 is R_HEEL
 
-        # --- Arm Joints ---
-        theta_init_dict['left_elbow_joint'] = calc_angle_2d(
+        # --- Arm Joints (FIXED: removed '_joint' from names) ---
+        theta_init_dict['left_elbow'] = calc_angle_2d(
             L_SHOULDER, L_ELBOW, L_WRIST)
-        theta_init_dict['right_elbow_joint'] = calc_angle_2d(
+        theta_init_dict['right_elbow'] = calc_angle_2d(
             R_SHOULDER, R_ELBOW, R_WRIST)
 
-        theta_init_dict['left_shoulder_joint'] = calc_angle_2d(
+        theta_init_dict['left_shoulder'] = calc_angle_2d(
             L_HIP, L_SHOULDER, L_ELBOW)
-        theta_init_dict['right_shoulder_joint'] = calc_angle_2d(
+        theta_init_dict['right_shoulder'] = calc_angle_2d(
             R_HIP, R_SHOULDER, R_ELBOW)
 
     except Exception as e:
@@ -262,24 +280,10 @@ if __name__ == "__main__":
     """
 
     # ---------------------------------------------------------------
-    # **TODO**: This is your most important task!
-    # You MUST replace this list with the *exact* joint names
-    # in the *exact* order from your humanoid.urdf file.
-    # (See our previous chat about using `check_pose.py` to find them)
+    # This list is now correct and matches your URDF.
     # ---------------------------------------------------------------
-    YOUR_URDF_JOINT_LIST = [
-        'left_hip_joint',
-        'left_knee_joint',
-        'left_ankle_joint',
-        'right_hip_joint',
-        'right_knee_joint',
-        'right_ankle_joint',
-        'left_shoulder_joint',
-        'left_elbow_joint',
-        'right_shoulder_joint',
-        'right_elbow_joint'
-        # ... add all other joints from your URDF file
-    ]
+    YOUR_URDF_JOINT_LIST = ['chest', 'neck', 'right_shoulder', 'right_elbow', 'left_shoulder',
+                            'left_elbow', 'right_hip', 'right_knee', 'right_ankle', 'left_hip', 'left_knee', 'left_ankle']
 
     # **TODO**: Update this to an image on your computer
     # (You can create an 'assets/pose_images/' folder)

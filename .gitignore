@@ -1,1 +1,3 @@
 *venv
+humanoid_lib/__pycache__/
+*.pyc
