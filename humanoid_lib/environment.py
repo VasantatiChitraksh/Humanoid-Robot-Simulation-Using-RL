@@ -26,6 +26,7 @@ class HumanoidWalkEnv(gym.Env):
 
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
+        self.plane_id = p.loadURDF("plane.urdf")
         # --- 2. Load Assets & Define Robot ---
         p.setGravity(0, 0, -9.8)
         self.urdf_path = "humanoid/humanoid.urdf"
@@ -89,15 +90,12 @@ class HumanoidWalkEnv(gym.Env):
 
         for i, info in enumerate(self.actuated_joints_info):
             if info['type'] == p.JOINT_REVOLUTE:
-                joint_positions.append(joint_states[i][0])  # Append float
-                joint_velocities.append(joint_states[i][1])  # Append float
+                joint_positions.append(joint_states[i][0])
+                joint_velocities.append(joint_states[i][1])
             elif info['type'] == p.JOINT_SPHERICAL:
-                # Extend with 4-tuple quaternion
-                joint_positions.extend(joint_states[i][0])
-                # Extend with 3-tuple angular vel
-                joint_velocities.extend(joint_states[i][1])
+                joint_positions.append(joint_states[i][0])
+                joint_velocities.append(joint_states[i][1])
 
-        # Combine all parts into a single flat vector
         return np.concatenate([
             torso_pos,
             torso_orn,
@@ -157,6 +155,8 @@ class HumanoidWalkEnv(gym.Env):
         self.robot_id = p.loadURDF(
             self.urdf_path, [0, 0, 1.5], useFixedBase=False)
 
+        self.plane_id = p.loadURDF("plane.urdf")
+
         if initial_pose is not None:
             if len(initial_pose) != self.num_actuated_joints:
                 raise ValueError(
@@ -164,8 +164,7 @@ class HumanoidWalkEnv(gym.Env):
                     f"match robot's actuated joints ({self.num_actuated_joints})."
                 )
 
-            # --- THIS IS THE FIX ---
-            # We now use the correct function based on joint type
+            # --- THIS IS THE CORRECT, UN-COMMENTED LOGIC ---
             for i, joint_name in enumerate(self.actuated_joint_names):
                 joint_info = self.actuated_joints_info[i]
                 joint_index = joint_info['index']
@@ -173,22 +172,27 @@ class HumanoidWalkEnv(gym.Env):
 
                 angle = initial_pose[i]
 
-                # if joint_type == p.JOINT_REVOLUTE:
-                #     # Use resetJointState for 1-DOF joints
-                p.resetJointState(
-                    self.robot_id,
-                    joint_index,
-                    targetValue=angle,
-                    targetVelocity=0.0
-                )
-                # elif joint_type == p.JOINT_SPHERICAL:
-                #     quaternion = p.getQuaternionFromEuler([angle, 0, 0])
-                #     p.resetJointStateMultiDof(
-                #         self.robot_id,
-                #         joint_index,
-                #         targetValue=quaternion,   # Pass the 4-value quaternion
-                #         targetVelocity=[0, 0, 0]  # Pass a 3-value list
-                #     )
+                if joint_type == p.JOINT_REVOLUTE:
+                    # Use resetJointState for 1-DOF joints
+                    p.resetJointState(
+                        self.robot_id,
+                        joint_index,
+                        targetValue=angle,
+                        targetVelocity=0.0
+                    )
+
+                elif joint_type == p.JOINT_SPHERICAL:
+                    # Use resetJointStateMultiDof for Multi-DOF joints
+                    # We assume our 2D angle maps to a "pitch" rotation
+                    quaternion = p.getQuaternionFromEuler([angle, 0, 0])
+
+                    p.resetJointStateMultiDof(
+                        self.robot_id,
+                        joint_index,
+                        targetValue=quaternion,   # Pass the 4-value quaternion
+                        targetVelocity=[0, 0, 0]  # Pass a 3-value list
+                    )
+            # ---------------------------------------------------
 
         self.last_x = 0.0
 
@@ -202,5 +206,8 @@ class HumanoidWalkEnv(gym.Env):
 
     def close(self):
         if self.physics_client is not None:
-            p.disconnect()
-            self.physics_client = None
+            try:
+                p.disconnect()
+                self.physics_client = None
+            except p.error:
+                pass

@@ -7,7 +7,7 @@ from humanoid_lib.environment import HumanoidWalkEnv
 print("--- STARTING INTEGRATION TEST (M1 -> M2) ---")
 
 # --- 1. Load Pose Library ---
-IMAGE_DIR = "assets/pose_images"
+IMAGE_DIR = "assets/pose_images/"
 try:
     pose_images = [os.path.join(IMAGE_DIR, f) for f in os.listdir(
         IMAGE_DIR) if f.endswith(('.jpg', '.png', '.jpeg'))]
@@ -61,7 +61,7 @@ try:
 
             # Hold the pose for 5 seconds
             start_time = time.time()
-            while time.time() - start_time < 5:
+            while time.time() - start_time < 15:
                 # We need to call stepSimulation to make the GUI update
                 # This is a good place to just let gravity run.
                 p.stepSimulation()

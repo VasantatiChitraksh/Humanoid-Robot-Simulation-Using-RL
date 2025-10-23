@@ -40,6 +40,7 @@ def visualize_pose(image_path: str, pose_result: mp.tasks.vision.PoseLandmarkerR
         # Select the main skeleton
         target_skeleton = select_target_skeleton(pose_result)
 
+
         # Convert normalized landmarks to pixel coordinates
         h, w, _ = image_for_drawing.shape
 
@@ -51,6 +52,7 @@ def visualize_pose(image_path: str, pose_result: mp.tasks.vision.PoseLandmarkerR
             pixel_landmarks.append((px, py))
 
         # --- Draw with CV2 ---
+        print("Len of pixel_landmarks:", len(pixel_landmarks))
 
         # 1. Draw the connections (lines)
         for connection in POSE_CONNECTIONS:
