@@ -26,7 +26,7 @@ class HumanoidWalkEnv(gym.Env):
 
         self.urdf_path = "humanoid/humanoid.urdf"
         start_pos = [0, 0, 1.5]
-        start_orientation = p.getQuaternionFromEuler([0, 0, 0])
+        start_orientation = p.getQuaternionFromEuler([np.pi/2, 0, 0])
         self.robot_id = p.loadURDF(
             self.urdf_path, start_pos, start_orientation, useFixedBase=False)
 
@@ -138,10 +138,10 @@ class HumanoidWalkEnv(gym.Env):
 
         self.plane_id = p.loadURDF("plane.urdf")
 
-        start_pos = [0, 0, 2.0]
-        start_orientation = p.getQuaternionFromEuler([0, 0, 0])
+        start_pos = [0, 0, 3.5]
+        start_orientation = p.getQuaternionFromEuler([np.pi/2, 0, 0])
         self.robot_id = p.loadURDF(
-            self.urdf_path, start_pos, start_orientation, useFixedBase=False)
+            self.urdf_path, start_pos, start_orientation, useFixedBase=True)
 
         if initial_pose is not None:
             if len(initial_pose) != self.num_actuated_joints:
@@ -161,6 +161,16 @@ class HumanoidWalkEnv(gym.Env):
                         self.robot_id, joint_index,
                         targetValue=angle, targetVelocity=0.0
                     )
+
+                elif joint_type == p.JOINT_SPHERICAL:
+                    if joint_name in ['left_hip', 'right_hip', 'left_shoulder', 'right_shoulder']:
+                        quaternion = p.getQuaternionFromEuler([0, angle, 0])
+                    elif joint_name in ['left_ankle', 'right_ankle']:
+                        quaternion = p.getQuaternionFromEuler([0, 0, angle])
+                        print(f"DEBUG: Using YAW mapping for {joint_name}")
+                    else:
+                        quaternion = p.getQuaternionFromEuler([angle, 0, 0])
+                        print(f"DEBUG: Using PITCH mapping for {joint_name}")
 
         settling_steps = 300
         for _ in range(settling_steps):

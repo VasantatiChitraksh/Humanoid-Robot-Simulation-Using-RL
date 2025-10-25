@@ -75,7 +75,10 @@ def select_target_skeleton(pose_result: vision.PoseLandmarkerResult) -> landmark
 
 def convert_to_joint_angles(skeleton_landmarks: landmark_pb2.NormalizedLandmarkList,
                             urdf_joints_list: list) -> np.ndarray:
-    """Converts the selected skeleton's Cartesian coordinates into initial joint angles (theta_init), adjusted for URDF zero pose."""
+    """
+    Converts the selected skeleton's Cartesian coordinates into
+    initial joint angles (theta_init), adjusted for URDF zero pose.
+    """
 
     def get_coords(lm_index):
         lm = skeleton_landmarks[lm_index]
@@ -86,6 +89,7 @@ def convert_to_joint_angles(skeleton_landmarks: landmark_pb2.NormalizedLandmarkL
         v1 = p1 - p2
         v2 = p3 - p2
         angle = np.arctan2(v2[1], v2[0]) - np.arctan2(v1[1], v1[0])
+        # Normalize to (-pi, pi]
         while angle <= -np.pi:
             angle += 2 * np.pi
         while angle > np.pi:
@@ -94,10 +98,17 @@ def convert_to_joint_angles(skeleton_landmarks: landmark_pb2.NormalizedLandmarkL
 
     def calc_angle_2d(p1_idx, p2_idx, p3_idx):
         return _calc_angle_2d_from_points(
-            get_coords(p1_idx),
-            get_coords(p2_idx),
-            get_coords(p3_idx)
+            get_coords(p1_idx), get_coords(p2_idx), get_coords(p3_idx)
         )
+
+    # Calculate angle of a single vector relative to horizontal
+    def vector_angle(p_start_idx, p_end_idx):
+        p_start = get_coords(p_start_idx)
+        p_end = get_coords(p_end_idx)
+        vec = p_end - p_start
+        # Angle in (-pi, pi] relative to positive x-axis
+        angle = np.arctan2(vec[1], vec[0])
+        return angle
 
     NOSE = 0
     L_SHOULDER, R_SHOULDER = 11, 12
@@ -110,27 +121,28 @@ def convert_to_joint_angles(skeleton_landmarks: landmark_pb2.NormalizedLandmarkL
     theta_init_dict = {}
 
     try:
+        # --- Calculate Raw Angles in range (-pi, pi] ---
         raw_left_knee = calc_angle_2d(L_HIP, L_KNEE, L_ANKLE)
         raw_right_knee = calc_angle_2d(R_HIP, R_KNEE, R_ANKLE)
         raw_left_elbow = calc_angle_2d(L_SHOULDER, L_ELBOW, L_WRIST)
         raw_right_elbow = calc_angle_2d(R_SHOULDER, R_ELBOW, R_WRIST)
-
         raw_left_hip = calc_angle_2d(L_SHOULDER, L_HIP, L_KNEE)
         raw_right_hip = calc_angle_2d(R_SHOULDER, R_HIP, R_KNEE)
         raw_left_shoulder = calc_angle_2d(L_HIP, L_SHOULDER, L_ELBOW)
         raw_right_shoulder = calc_angle_2d(R_HIP, R_SHOULDER, R_ELBOW)
-
-        raw_left_ankle = calc_angle_2d(L_KNEE, L_ANKLE, 29)
-        raw_right_ankle = calc_angle_2d(R_KNEE, R_ANKLE, 30)
+        raw_left_ankle = calc_angle_2d(L_KNEE, L_ANKLE, 29)  # 29=L_HEEL
+        raw_right_ankle = calc_angle_2d(R_KNEE, R_ANKLE, 30)  # 30=R_HEEL
 
         p_mid_hip = (get_coords(L_HIP) + get_coords(R_HIP)) / 2
         p_mid_shoulder = (get_coords(L_SHOULDER) + get_coords(R_SHOULDER)) / 2
         p_nose = get_coords(NOSE)
         v_torso = p_mid_shoulder - p_mid_hip
-        raw_chest = np.arctan2(v_torso[0], v_torso[1])
+        raw_chest = np.arctan2(v_torso[0], v_torso[1])  # Angle from vertical
         raw_neck = _calc_angle_2d_from_points(
             p_mid_hip, p_mid_shoulder, p_nose)
 
+        # --- Adjust angles relative to URDF T-Pose (0 = straight/default) ---
+        # Revolute joints (knees, elbows): Map straight (+/- pi) to 0
         theta_init_dict['left_knee'] = raw_left_knee - \
             np.pi if raw_left_knee > 0 else raw_left_knee + np.pi
         theta_init_dict['right_knee'] = raw_right_knee - \
@@ -140,24 +152,34 @@ def convert_to_joint_angles(skeleton_landmarks: landmark_pb2.NormalizedLandmarkL
         theta_init_dict['right_elbow'] = raw_right_elbow - \
             np.pi if raw_right_elbow > 0 else raw_right_elbow + np.pi
 
-        theta_init_dict['left_hip'] = raw_left_hip - np.pi/2
-        theta_init_dict['right_hip'] = raw_right_hip - np.pi/2
-        theta_init_dict['left_shoulder'] = raw_left_shoulder - np.pi/2
-        theta_init_dict['right_shoulder'] = raw_right_shoulder - np.pi/2
+        # Spherical joints: Use raw internal angles for now, assuming they approximate pitch
+        # Further offsets (-pi/2 etc.) can be added here if needed based on visual tuning
+        theta_init_dict['left_hip'] = raw_left_hip
+        theta_init_dict['right_hip'] = raw_right_hip
+        theta_init_dict['left_shoulder'] = raw_left_shoulder
+        theta_init_dict['right_shoulder'] = raw_right_shoulder
         theta_init_dict['left_ankle'] = raw_left_ankle
         theta_init_dict['right_ankle'] = raw_right_ankle
         theta_init_dict['chest'] = raw_chest
         theta_init_dict['neck'] = raw_neck
 
+        # Ensure all angles are in (-pi, pi] post-adjustment
+        for key in theta_init_dict:
+            angle = theta_init_dict[key]
+            while angle <= -np.pi:
+                angle += 2 * np.pi
+            while angle > np.pi:
+                angle -= 2 * np.pi
+            theta_init_dict[key] = angle
+
     except Exception as e:
-        print(f"Error calculating angles (check landmark visibility?): {e}")
+        print(f"Error calculating angles: {e}")
         return np.array([])
 
     final_pose_vector = []
     for joint_name in urdf_joints_list:
         if joint_name not in theta_init_dict:
-            print(
-                f"Warning: Joint '{joint_name}' from URDF list was not calculated.")
+            print(f"Warning: Joint '{joint_name}' not calculated.")
             final_pose_vector.append(0.0)
         else:
             final_pose_vector.append(theta_init_dict[joint_name])
