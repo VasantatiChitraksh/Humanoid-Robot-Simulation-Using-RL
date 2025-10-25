@@ -61,7 +61,7 @@ try:
 
             # Hold the pose for 5 seconds
             start_time = time.time()
-            while time.time() - start_time < 15:
+            while time.time() - start_time < 5:
                 # We need to call stepSimulation to make the GUI update
                 # This is a good place to just let gravity run.
                 p.stepSimulation()

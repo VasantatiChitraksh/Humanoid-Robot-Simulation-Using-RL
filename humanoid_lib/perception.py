@@ -6,7 +6,6 @@ from mediapipe.tasks.python import vision
 from mediapipe.framework.formats import landmark_pb2
 import os
 
-# --- Global MediaPipe Initialization ---
 try:
     MODEL_PATH = 'assets/pose_landmarker_heavy.task'
     if not os.path.exists(MODEL_PATH):
@@ -27,16 +26,9 @@ except Exception as e:
     print("and place it in your project's root directory (or update MODEL_PATH).")
     POSE_LANDMARKER = None
 
-# -----------------------------------------------------------------
-# Task 1.1: Image Acquisition and Preprocessing
-# -----------------------------------------------------------------
-
 
 def load_image(image_path: str) -> mp.Image:
-    """
-    Loads an image from a file path and converts it into 
-    MediaPipe's Image format.
-    """
+    """Loads an image from a file path and converts it into MediaPipe's Image format."""
     image_cv = cv2.imread(image_path)
     if image_cv is None:
         raise FileNotFoundError(f"Image not found at {image_path}")
@@ -44,32 +36,18 @@ def load_image(image_path: str) -> mp.Image:
     image_rgb = cv2.cvtColor(image_cv, cv2.COLOR_BGR2RGB)
     return mp.Image(image_format=mp.ImageFormat.SRGB, data=image_rgb)
 
-# -----------------------------------------------------------------
-# Task 1.2: Multi-Person Keypoint Extraction
-# -----------------------------------------------------------------
-
 
 def extract_skeletons(image: mp.Image) -> vision.PoseLandmarkerResult:
-    """
-    Processes the image using MediaPipe to detect multiple people
-    and output their skeletons.
-    """
+    """Processes the image using MediaPipe to detect multiple people and output their skeletons."""
     if POSE_LANDMARKER is None:
         raise ImportError("MediaPipe PoseLandmarker is not initialized.")
 
     pose_landmarker_result = POSE_LANDMARKER.detect(image)
     return pose_landmarker_result
 
-# -----------------------------------------------------------------
-# Task 1.3: Target Selection and Kinematic Conversion
-# -----------------------------------------------------------------
-
 
 def select_target_skeleton(pose_result: vision.PoseLandmarkerResult) -> landmark_pb2.NormalizedLandmarkList:
-    """
-    Selects one skeleton using the 'largest bounding box area'
-    heuristic.
-    """
+    """Selects one skeleton using the 'largest bounding box area' heuristic."""
     if not pose_result.pose_landmarks:
         raise ValueError("No valid skeletons found in the image.")
 
@@ -97,30 +75,24 @@ def select_target_skeleton(pose_result: vision.PoseLandmarkerResult) -> landmark
 
 def convert_to_joint_angles(skeleton_landmarks: landmark_pb2.NormalizedLandmarkList,
                             urdf_joints_list: list) -> np.ndarray:
-    """
-    Converts the selected skeleton's Cartesian coordinates into
-    initial joint angles (theta_init) using trigonometric
-    functions like atan2.
-    """
+    """Converts the selected skeleton's Cartesian coordinates into initial joint angles (theta_init), adjusted for URDF zero pose."""
 
     def get_coords(lm_index):
-        """Get 2D (x, y) coordinates from the landmark list."""
         lm = skeleton_landmarks[lm_index]
         return np.array([lm.x, lm.y])
 
     def _calc_angle_2d_from_points(p1, p2, p3):
-        """
-        Calculates the 2D angle at p2 formed by p1-p2-p3.
-        """
+        """Calculates angle at p2 in range (-pi, pi]."""
         v1 = p1 - p2
         v2 = p3 - p2
         angle = np.arctan2(v2[1], v2[0]) - np.arctan2(v1[1], v1[0])
-        if angle < 0:
+        while angle <= -np.pi:
             angle += 2 * np.pi
+        while angle > np.pi:
+            angle -= 2 * np.pi
         return angle
 
     def calc_angle_2d(p1_idx, p2_idx, p3_idx):
-        """Wrapper to calculate angle from landmark indices."""
         return _calc_angle_2d_from_points(
             get_coords(p1_idx),
             get_coords(p2_idx),
@@ -138,35 +110,44 @@ def convert_to_joint_angles(skeleton_landmarks: landmark_pb2.NormalizedLandmarkL
     theta_init_dict = {}
 
     try:
+        raw_left_knee = calc_angle_2d(L_HIP, L_KNEE, L_ANKLE)
+        raw_right_knee = calc_angle_2d(R_HIP, R_KNEE, R_ANKLE)
+        raw_left_elbow = calc_angle_2d(L_SHOULDER, L_ELBOW, L_WRIST)
+        raw_right_elbow = calc_angle_2d(R_SHOULDER, R_ELBOW, R_WRIST)
+
+        raw_left_hip = calc_angle_2d(L_SHOULDER, L_HIP, L_KNEE)
+        raw_right_hip = calc_angle_2d(R_SHOULDER, R_HIP, R_KNEE)
+        raw_left_shoulder = calc_angle_2d(L_HIP, L_SHOULDER, L_ELBOW)
+        raw_right_shoulder = calc_angle_2d(R_HIP, R_SHOULDER, R_ELBOW)
+
+        raw_left_ankle = calc_angle_2d(L_KNEE, L_ANKLE, 29)
+        raw_right_ankle = calc_angle_2d(R_KNEE, R_ANKLE, 30)
+
         p_mid_hip = (get_coords(L_HIP) + get_coords(R_HIP)) / 2
         p_mid_shoulder = (get_coords(L_SHOULDER) + get_coords(R_SHOULDER)) / 2
         p_nose = get_coords(NOSE)
-
         v_torso = p_mid_shoulder - p_mid_hip
-        theta_init_dict['chest'] = np.arctan2(v_torso[0], v_torso[1])
-        theta_init_dict['neck'] = _calc_angle_2d_from_points(
+        raw_chest = np.arctan2(v_torso[0], v_torso[1])
+        raw_neck = _calc_angle_2d_from_points(
             p_mid_hip, p_mid_shoulder, p_nose)
 
-        theta_init_dict['left_knee'] = calc_angle_2d(
-            L_HIP, L_KNEE, L_ANKLE)
-        theta_init_dict['right_knee'] = calc_angle_2d(
-            R_HIP, R_KNEE, R_ANKLE)
-        theta_init_dict['left_hip'] = calc_angle_2d(
-            L_SHOULDER, L_HIP, L_KNEE)
-        theta_init_dict['right_hip'] = calc_angle_2d(
-            R_SHOULDER, R_HIP, R_KNEE)
-        theta_init_dict['left_ankle'] = calc_angle_2d(
-            L_KNEE, L_ANKLE, 29)
-        theta_init_dict['right_ankle'] = calc_angle_2d(
-            R_KNEE, R_ANKLE, 30)
-        theta_init_dict['left_elbow'] = calc_angle_2d(
-            L_SHOULDER, L_ELBOW, L_WRIST)
-        theta_init_dict['right_elbow'] = calc_angle_2d(
-            R_SHOULDER, R_ELBOW, R_WRIST)
-        theta_init_dict['left_shoulder'] = calc_angle_2d(
-            L_HIP, L_SHOULDER, L_ELBOW)
-        theta_init_dict['right_shoulder'] = calc_angle_2d(
-            R_HIP, R_SHOULDER, R_ELBOW)
+        theta_init_dict['left_knee'] = raw_left_knee - \
+            np.pi if raw_left_knee > 0 else raw_left_knee + np.pi
+        theta_init_dict['right_knee'] = raw_right_knee - \
+            np.pi if raw_right_knee > 0 else raw_right_knee + np.pi
+        theta_init_dict['left_elbow'] = raw_left_elbow - \
+            np.pi if raw_left_elbow > 0 else raw_left_elbow + np.pi
+        theta_init_dict['right_elbow'] = raw_right_elbow - \
+            np.pi if raw_right_elbow > 0 else raw_right_elbow + np.pi
+
+        theta_init_dict['left_hip'] = raw_left_hip - np.pi/2
+        theta_init_dict['right_hip'] = raw_right_hip - np.pi/2
+        theta_init_dict['left_shoulder'] = raw_left_shoulder - np.pi/2
+        theta_init_dict['right_shoulder'] = raw_right_shoulder - np.pi/2
+        theta_init_dict['left_ankle'] = raw_left_ankle
+        theta_init_dict['right_ankle'] = raw_right_ankle
+        theta_init_dict['chest'] = raw_chest
+        theta_init_dict['neck'] = raw_neck
 
     except Exception as e:
         print(f"Error calculating angles (check landmark visibility?): {e}")
@@ -183,15 +164,9 @@ def convert_to_joint_angles(skeleton_landmarks: landmark_pb2.NormalizedLandmarkL
 
     return np.array(final_pose_vector)
 
-# -----------------------------------------------------------------
-# --- Main Pipeline Function ---
-# -----------------------------------------------------------------
-
 
 def get_pose_from_image(image_path: str, urdf_joints_list: list) -> np.ndarray:
-    """
-    Runs the full Module 1 pipeline from image path to angle vector.
-    """
+    """Runs the full pipeline from image path to angle vector."""
     if POSE_LANDMARKER is None:
         print("Module 1 cannot run. PoseLandmarker not initialized.")
         return
@@ -209,11 +184,11 @@ def get_pose_from_image(image_path: str, urdf_joints_list: list) -> np.ndarray:
         print("Converting to joint angles...")
         theta_init = convert_to_joint_angles(target_skeleton, urdf_joints_list)
 
-        print("\n--- Module 1 Pipeline Complete ---")
+        print("\n--- Pipeline Complete ---")
         return theta_init
 
     except Exception as e:
-        print(f"\n--- Module 1 Pipeline FAILED ---")
+        print(f"\n--- Pipeline FAILED ---")
         print(f"An error occurred: {e}")
         import traceback
         traceback.print_exc()
