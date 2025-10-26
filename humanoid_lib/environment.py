@@ -94,25 +94,46 @@ class HumanoidWalkEnv(gym.Env):
             joint_velocities
         ]).astype(np.float32)
 
-    def _calculate_reward(self, torso_pos):
-        """Calculates reward based on forward velocity and staying upright."""
+    def _calculate_reward(self, torso_pos, applied_torques):
+        """
+        Calculates reward based on forward velocity, staying upright,
+        and energy usage. Now includes renergy.
+        """
         current_x = torso_pos[0]
         r_vel = current_x - self.last_x
         self.last_x = current_x
 
         is_alive = torso_pos[2] > 0.8
         r_live = 0.01 if is_alive else -1.0
-        r_energy = 0.0
 
-        return r_vel + r_live - r_energy
+        energy_weight = 0.0001
+        r_energy = energy_weight * np.sum(np.square(applied_torques))
+        reward = 1.0 * r_vel + 1.0 * r_live - 1.0 * r_energy
 
-    def step(self, action):
-        """Advances the simulation by one timestep."""
+        return reward
+
+    def step(self, action_torques):
+        """
+        Applies torques to joints, steps simulation, and returns results.
+        Accepts the actual torque values, not bin indices.
+        """
+        action_torques = np.array(action_torques, dtype=np.float32)
+
+        if len(action_torques) != self.num_actuated_joints:
+            raise ValueError(
+                f"Action dimension ({len(action_torques)}) != num actuated joints ({self.num_actuated_joints})")
+
+        p.setJointMotorControlArray(
+            bodyIndex=self.robot_id,
+            jointIndices=[info['index'] for info in self.actuated_joints_info],
+            controlMode=p.TORQUE_CONTROL,
+            forces=action_torques
+        )
         p.stepSimulation()
 
         torso_pos, _ = p.getBasePositionAndOrientation(self.robot_id)
         observation = self._get_observation()
-        reward = self._calculate_reward(torso_pos)
+        reward = self._calculate_reward(torso_pos, action_torques)
 
         terminated = torso_pos[2] < 0.8
         truncated = False
@@ -141,7 +162,7 @@ class HumanoidWalkEnv(gym.Env):
         start_pos = [0, 0, 3.5]
         start_orientation = p.getQuaternionFromEuler([np.pi/2, 0, 0])
         self.robot_id = p.loadURDF(
-            self.urdf_path, start_pos, start_orientation, useFixedBase=True)
+            self.urdf_path, start_pos, start_orientation, useFixedBase=False)
 
         if initial_pose is not None:
             if len(initial_pose) != self.num_actuated_joints:
