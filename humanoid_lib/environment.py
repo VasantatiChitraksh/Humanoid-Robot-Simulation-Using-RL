@@ -85,6 +85,11 @@ class HumanoidWalkEnv(gym.Env):
                 joint_velocities.append(joint_states[i][1])
             elif info['type'] == p.JOINT_SPHERICAL:
                 joint_positions.append(joint_states[i][0])
+                joint_positions.append(joint_states[i][0])
+                joint_positions.append(joint_states[i][0])
+                joint_positions.append(joint_states[i][0])
+                joint_velocities.append(joint_states[i][1])
+                joint_velocities.append(joint_states[i][1])
                 joint_velocities.append(joint_states[i][1])
 
         return np.concatenate([
@@ -162,7 +167,7 @@ class HumanoidWalkEnv(gym.Env):
         start_pos = [0, 0, 3.5]
         start_orientation = p.getQuaternionFromEuler([np.pi/2, 0, 0])
         self.robot_id = p.loadURDF(
-            self.urdf_path, start_pos, start_orientation, useFixedBase=False)
+            self.urdf_path, start_pos, start_orientation, useFixedBase=True)
 
         if initial_pose is not None:
             if len(initial_pose) != self.num_actuated_joints:

@@ -1,23 +1,24 @@
+# Make sure DQNAgent class is importable
+from humanoid_lib.agent import DQNAgent
+from humanoid_lib.environment import HumanoidWalkEnv
 import os
 import sys
 import torch
 import numpy as np
 import random
 import time
-import pybullet as p 
+import pybullet as p
 
 # Add project root to path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, project_root)
 
-from humanoid_lib.environment import HumanoidWalkEnv
-from humanoid_lib.agent import DQNAgent # Make sure DQNAgent class is importable
 
 # --- Configuration ---
-POSE_LIBRARY_PATH = os.path.join(project_root, "assets", "poses.npy")
-MODEL_LOAD_PATH = os.path.join(project_root, "dqn_humanoid.pth") # Path to your saved model
-SEED = 42 # Use a fixed seed for testing if desired
-NUM_TEST_EPISODES = 10 # How many different starting poses to test
+POSE_LIBRARY_PATH = "assets/output/poses.npy"
+MODEL_LOAD_PATH = "assets/output/dqn_humanoid_model.pth"  # Path to your saved model
+SEED = 42  # Use a fixed seed for testing if desired
+NUM_TEST_EPISODES = 10  # How many different starting poses to test
 MAX_T_TEST = 1000      # Max steps per test episode
 
 # Action Mapping Configuration (MUST match training script)
@@ -25,6 +26,7 @@ NUM_BINS = 5
 TORQUE_LIMIT = 1.0
 TORQUE_VALUES = np.linspace(-TORQUE_LIMIT, TORQUE_LIMIT, NUM_BINS)
 # --------------------
+
 
 def test_agent(env, agent, pose_library, n_episodes=NUM_TEST_EPISODES, max_t=MAX_T_TEST):
     """Loads the agent's weights and runs it in the environment."""
@@ -49,10 +51,10 @@ def test_agent(env, agent, pose_library, n_episodes=NUM_TEST_EPISODES, max_t=MAX
         try:
             state, _ = env.reset(initial_pose=initial_pose)
             if state.shape[0] != agent.state_dim:
-                 raise ValueError("State dimension mismatch on reset")
+                raise ValueError("State dimension mismatch on reset")
         except ValueError as e:
-             print(f"Error resetting env: {e}. Skipping episode.")
-             continue
+            print(f"Error resetting env: {e}. Skipping episode.")
+            continue
 
         score = 0
         print("Running simulation...")
@@ -66,9 +68,10 @@ def test_agent(env, agent, pose_library, n_episodes=NUM_TEST_EPISODES, max_t=MAX
 
             # --- Environment steps ---
             try:
-                next_state, reward, terminated, truncated, _ = env.step(applied_torques)
+                next_state, reward, terminated, truncated, _ = env.step(
+                    applied_torques)
                 done = terminated or truncated
-            except p.error as e: # Catch PyBullet errors if simulation becomes unstable
+            except p.error as e:  # Catch PyBullet errors if simulation becomes unstable
                 print(f"\nPyBullet Error during step {t}: {e}")
                 print("Ending episode early.")
                 break
@@ -78,12 +81,13 @@ def test_agent(env, agent, pose_library, n_episodes=NUM_TEST_EPISODES, max_t=MAX
 
             # --- Slow down rendering for visualization ---
             # Need a small sleep to see the movement in GUI mode
-            time.sleep(1./240.) # Match PyBullet's default timestep for smooth viewing
+            # Match PyBullet's default timestep for smooth viewing
+            time.sleep(1./240.)
 
             if done:
                 print(f"Episode finished after {t+1} timesteps.")
                 break
-        else: # This else block runs if the loop completes without a 'break'
+        else:  # This else block runs if the loop completes without a 'break'
             print(f"Episode reached max timesteps ({max_t}).")
 
         print(f"Episode Score: {score:.2f}")
@@ -102,7 +106,8 @@ def main():
     try:
         pose_library = np.load(POSE_LIBRARY_PATH)
         if pose_library.ndim != 2 or pose_library.shape[0] == 0:
-            raise ValueError("Pose library is empty or has incorrect dimensions.")
+            raise ValueError(
+                "Pose library is empty or has incorrect dimensions.")
         print(f"Loaded {pose_library.shape[0]} poses.")
     except Exception as e:
         print(f"Error loading pose library: {e}")
@@ -120,7 +125,8 @@ def main():
         print(f"Action space: {action_space}")
     except Exception as e:
         print(f"Error initializing environment: {e}")
-        if env: env.close()
+        if env:
+            env.close()
         return
 
     # --- Initialize Agent ---
