@@ -7,7 +7,7 @@ from humanoid_lib.environment import HumanoidWalkEnv
 print("--- STARTING INTEGRATION TEST (M1 -> M2) ---")
 
 # --- 1. Load Pose Library ---
-IMAGE_DIR = "assets/pose_images/"
+IMAGE_DIR = "assets/test_images/"
 try:
     pose_images = [os.path.join(IMAGE_DIR, f) for f in os.listdir(
         IMAGE_DIR) if f.endswith(('.jpg', '.png', '.jpeg'))]

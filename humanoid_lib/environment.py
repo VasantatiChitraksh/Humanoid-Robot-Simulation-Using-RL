@@ -25,7 +25,7 @@ class HumanoidWalkEnv(gym.Env):
         p.setGravity(0, 0, -9.8)
 
         self.urdf_path = "humanoid/humanoid.urdf"
-        start_pos = [0, 0, 1.5]
+        start_pos = [0, 0, 3.5]
         start_orientation = p.getQuaternionFromEuler([np.pi/2, 0, 0])
         self.robot_id = p.loadURDF(
             self.urdf_path, start_pos, start_orientation, useFixedBase=False)
@@ -167,7 +167,7 @@ class HumanoidWalkEnv(gym.Env):
         start_pos = [0, 0, 3.5]
         start_orientation = p.getQuaternionFromEuler([np.pi/2, 0, 0])
         self.robot_id = p.loadURDF(
-            self.urdf_path, start_pos, start_orientation, useFixedBase=True)
+            self.urdf_path, start_pos, start_orientation, useFixedBase=False)
 
         if initial_pose is not None:
             if len(initial_pose) != self.num_actuated_joints:
@@ -197,6 +197,10 @@ class HumanoidWalkEnv(gym.Env):
                     else:
                         quaternion = p.getQuaternionFromEuler([angle, 0, 0])
                         print(f"DEBUG: Using PITCH mapping for {joint_name}")
+                    # p.resetJointStateMultiDof(
+                    #     self.robot_id, joint_index,
+                    #     targetValue=quaternion, targetVelocity=[0.0, 0.0, 0.0]
+                    # )
 
         settling_steps = 300
         for _ in range(settling_steps):

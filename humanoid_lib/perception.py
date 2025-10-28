@@ -16,7 +16,8 @@ try:
         base_options=base_options,
         output_segmentation_masks=False,
         running_mode=vision.RunningMode.IMAGE,
-        num_poses=5
+        num_poses=5,
+        min_pose_detection_confidence=0.25
     )
     POSE_LANDMARKER = vision.PoseLandmarker.create_from_options(options)
     print("MediaPipe PoseLandmarker initialized successfully.")
@@ -43,6 +44,8 @@ def extract_skeletons(image: mp.Image) -> vision.PoseLandmarkerResult:
         raise ImportError("MediaPipe PoseLandmarker is not initialized.")
 
     pose_landmarker_result = POSE_LANDMARKER.detect(image)
+    print(
+        f"Detected {len(pose_landmarker_result.pose_landmarks)} skeleton(s).")
     return pose_landmarker_result
 
 

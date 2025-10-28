@@ -18,7 +18,7 @@ MODEL_SAVE_PATH = "assets/output/dqn_humanoid_model.pth"
 SEED = 0
 
 # --- Hyperparameters ---
-N_EPISODES = 10       # Total number of training episodes
+N_EPISODES = 100     # Total number of training episodes
 MAX_T = 1000            # Max number of timesteps per episode
 EPS_START = 1.0         # Starting value of epsilon, for exploration
 EPS_END = 0.01          # Minimum value of epsilon

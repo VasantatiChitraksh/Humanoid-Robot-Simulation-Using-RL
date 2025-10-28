@@ -89,7 +89,7 @@ def visualize_pose(image_path: str, pose_result: mp.tasks.vision.PoseLandmarkerR
 
 
 # -----------------------------------------------------------------
-# --- TEST SCRIPT ---
+# --- BATCH TEST SCRIPT FOR MULTIPLE IMAGES ---
 # -----------------------------------------------------------------
 if __name__ == "__main__":
 
@@ -97,34 +97,65 @@ if __name__ == "__main__":
     URDF_JOINT_LIST = ['chest', 'neck', 'right_shoulder', 'right_elbow', 'left_shoulder',
                        'left_elbow', 'right_hip', 'right_knee', 'right_ankle', 'left_hip', 'left_knee', 'left_ankle']
 
-    # Set to a valid test image path
-    TEST_IMAGE_PATH = 'assets/test_images/11. TREE.jpg'
+    IMAGE_FOLDER = "assets/test_images"  # Folder containing test images
 
-    if not os.path.exists(TEST_IMAGE_PATH):
-        print(f"Test image not found at {TEST_IMAGE_PATH}")
-        print("Please set TEST_IMAGE_PATH to a valid image file.")
-    else:
+    if not os.path.isdir(IMAGE_FOLDER):
+        print(f"❌ Folder not found: {IMAGE_FOLDER}")
+        exit(1)
 
-        # --- 1. Run the full pipeline to get the vector output ---
-        print("--- Running Module 1 Pipeline ---")
-        theta_init_vector = get_pose_from_image(
-            TEST_IMAGE_PATH, URDF_JOINT_LIST)
+    # Get all supported image files in the folder
+    valid_extensions = ('.png', '.jpg', '.jpeg', '.bmp', '.tiff')
+    image_files = [f for f in os.listdir(IMAGE_FOLDER)
+                   if f.lower().endswith(valid_extensions)]
 
-        # --- 2. Print the init vector ---
-        if theta_init_vector.size > 0:
-            print("\n--- TEST SUCCESS! ---")
-            print(f"Final Output Shape: {theta_init_vector.shape}")
-            print(f"Expected Shape: ({len(URDF_JOINT_LIST)},)")
-            print("\nFinal Initial Pose Vector (theta_init):")
-            print(theta_init_vector)
+    if not image_files:
+        print(f"⚠️ No image files found in {IMAGE_FOLDER}")
+        exit(1)
 
-            # --- 3. Run visualization ---
-            try:
-                mp_image = load_image(TEST_IMAGE_PATH)
-                pose_result = extract_skeletons(mp_image)
-                visualize_pose(TEST_IMAGE_PATH, pose_result)
-            except Exception as e:
-                print(f"Error during visualization: {e}")
-        else:
-            print("--- TEST FAILED ---")
-            print("Could not generate pose vector.")
+    print(f"\n✅ Found {len(image_files)} image(s) in {IMAGE_FOLDER}")
+    print("Starting batch processing...\n")
+
+    for idx, image_name in enumerate(sorted(image_files), start=1):
+        image_path = os.path.join(IMAGE_FOLDER, image_name)
+        print(f"\n{'='*60}")
+        print(f"[{idx}/{len(image_files)}] Processing: {image_name}")
+        print(f"{'='*60}")
+
+        try:
+            # --- 1. Run the full pipeline to get the vector output ---
+            theta_init_vector = get_pose_from_image(
+                image_path, URDF_JOINT_LIST)
+
+            # --- 2. Print the init vector ---
+            if theta_init_vector.size > 0:
+                print("\n--- TEST SUCCESS! ---")
+                print(f"Final Output Shape: {theta_init_vector.shape}")
+                print(f"Expected Shape: ({len(URDF_JOINT_LIST)},)")
+                print("\nFinal Initial Pose Vector (theta_init):")
+                print(theta_init_vector)
+
+                # --- 3. Run visualization ---
+                try:
+                    mp_image = load_image(image_path)
+                    pose_result = extract_skeletons(mp_image)
+                    visualize_pose(image_path, pose_result)
+                except Exception as e:
+                    print(f"Visualization error: {e}")
+            else:
+                print("--- TEST FAILED ---")
+                print("Could not generate pose vector.")
+
+        except KeyboardInterrupt:
+            print("\n🛑 Process interrupted by user. Exiting.")
+            break
+        except Exception as e:
+            print(f"Error while processing {image_name}: {e}")
+
+        # Wait for user input to continue to next image
+        try:
+            input("\nPress Enter to continue to the next image (Ctrl+C to exit)...")
+        except KeyboardInterrupt:
+            print("\n🛑 Process stopped by user.")
+            break
+
+    print("\n✅ Batch processing complete.")
